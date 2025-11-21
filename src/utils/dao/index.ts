@@ -3,7 +3,7 @@ import { SupabaseDAO } from './supabaseDAO';
 import { LocalStorageDAO } from './localStorageDAO';
 import { isSupabaseConfigured } from '../supabase';
 // Configuration: Use LocalStorage by default, switch to Supabase when configured
-const USE_SUPABASE = false; // Set to false to use LocalStorage by default
+const USE_SUPABASE = true; // Set to false to use LocalStorage by default
 // Factory function to get the appropriate DAO
 export function getDataAccess(): IDataAccess {
   if (USE_SUPABASE && isSupabaseConfigured()) {

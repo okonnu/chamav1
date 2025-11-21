@@ -1,66 +1,123 @@
-import React, { useState } from 'react';
-import { User } from '../types';
-import { DollarSignIcon, LogInIcon, UserPlusIcon } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { SubmitHandler, useForm } from "react-hook-form";
+import { User } from "../types";
+import { DollarSignIcon, LogInIcon, UserPlusIcon } from "lucide-react";
+import { supabase } from "../utils/supabase";
+
 interface LoginProps {
   onLogin: (user: User) => void;
 }
-export function Login({
-  onLogin
-}: LoginProps) {
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      toast.error('Please fill in all fields');
-      return;
+
+type LoginInputs = {
+  email: string;
+  password: string;
+};
+
+type RegisterInputs = {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
+
+export function Login({ onLogin }: LoginProps) {
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [error, setError] = useState("");
+
+  // Login form setup
+  const {
+    register: registerLogin,
+    handleSubmit: handleLoginSubmit,
+    formState: { errors: loginErrors, isSubmitting: isLoginSubmitting },
+  } = useForm<LoginInputs>();
+
+  // Register form setup
+  const {
+    register: registerRegister,
+    handleSubmit: handleRegisterSubmit,
+    formState: { errors: registerErrors, isSubmitting: isRegisterSubmitting },
+    watch,
+  } = useForm<RegisterInputs>();
+
+  const password = watch("password");
+
+  const onLoginSubmit: SubmitHandler<LoginInputs> = async (data) => {
+    setError("");
+    try {
+      if (!supabase) {
+        setError("Database not configured");
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+
+      // Get user session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.user) {
+        const user: User = {
+          id: session.user.id,
+          name:
+            session.user.user_metadata?.full_name || data.email.split("@")[0],
+          email: session.user.email || data.email,
+        };
+        onLogin(user);
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
+      console.error("Login error:", err);
     }
-    setLoading(true);
-    // Simulate a brief loading state for better UX
-    setTimeout(() => {
-      const user: User = {
-        id: Date.now().toString(),
-        name: email.split('@')[0],
-        email
-      };
-      toast.success('Welcome back!');
-      onLogin(user);
-      setLoading(false);
-    }, 500);
   };
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !email || !password || !confirmPassword) {
-      toast.error('Please fill in all fields');
-      return;
+
+  const onRegisterSubmit: SubmitHandler<RegisterInputs> = async (data) => {
+    setError("");
+    try {
+      if (!supabase) {
+        setError("Database not configured");
+        return;
+      }
+
+      // Sign up with Supabase
+      const { error: signUpError, data: signUpData } =
+        await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: {
+            data: {
+              full_name: data.name,
+            },
+          },
+        });
+
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      if (signUpData.user) {
+        const user: User = {
+          id: signUpData.user.id,
+          name: data.name,
+          email: data.email,
+        };
+        onLogin(user);
+      }
+    } catch (err) {
+      setError("An unexpected error occurred during registration");
+      console.error("Register error:", err);
     }
-    if (password !== confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
-    setLoading(true);
-    // Simulate a brief loading state for better UX
-    setTimeout(() => {
-      const user: User = {
-        id: Date.now().toString(),
-        name,
-        email
-      };
-      toast.success('Account created successfully!');
-      onLogin(user);
-      setLoading(false);
-    }, 500);
   };
-  return <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+  return (
+    <div className="min-h-screen w-full bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="flex justify-center mb-6">
           <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
@@ -73,68 +130,242 @@ export function Login({
         <p className="text-gray-600 text-center mb-8">
           Manage your investment clubs with ease
         </p>
+
         {/* Tab Navigation */}
         <div className="flex border-b border-gray-200 mb-6">
-          <button onClick={() => setActiveTab('login')} className={`flex-1 pb-3 text-sm font-medium transition-colors ${activeTab === 'login' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+          <button
+            onClick={() => {
+              setActiveTab("login");
+              setError("");
+            }}
+            className={`flex-1 pb-3 text-sm font-medium transition-colors ${
+              activeTab === "login"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
             Login
           </button>
-          <button onClick={() => setActiveTab('register')} className={`flex-1 pb-3 text-sm font-medium transition-colors ${activeTab === 'register' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>
+          <button
+            onClick={() => {
+              setActiveTab("register");
+              setError("");
+            }}
+            className={`flex-1 pb-3 text-sm font-medium transition-colors ${
+              activeTab === "register"
+                ? "border-b-2 border-blue-600 text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
             Register
           </button>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+
         {/* Login Form */}
-        {activeTab === 'login' && <form onSubmit={handleLogin} className="space-y-5">
+        {activeTab === "login" && (
+          <form
+            onSubmit={handleLoginSubmit(onLoginSubmit)}
+            className="space-y-5"
+          >
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
               </label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="john@example.com" required disabled={loading} />
+              <input
+                type="email"
+                placeholder="john@example.com"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoginSubmitting}
+                {...registerLogin("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Invalid email address",
+                  },
+                })}
+              />
+              {loginErrors.email && (
+                <span className="text-red-500 text-sm mt-1">
+                  {loginErrors.email.message}
+                </span>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required disabled={loading} />
+              <input
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isLoginSubmitting}
+                {...registerLogin("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 6,
+                    message: "Password must be at least 6 characters",
+                  },
+                })}
+              />
+              {loginErrors.password && (
+                <span className="text-red-500 text-sm mt-1">
+                  {loginErrors.password.message}
+                </span>
+              )}
             </div>
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors font-medium">
+
+            <button
+              type="submit"
+              disabled={isLoginSubmitting}
+              className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors font-medium"
+            >
               <LogInIcon className="w-5 h-5 mr-2" />
-              {loading ? 'Logging in...' : 'Login'}
+              {isLoginSubmitting ? "Logging in..." : "Login"}
             </button>
-          </form>}
+
+            <p className="text-sm text-gray-600 text-center">
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setActiveTab("register")}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                Register here
+              </button>
+            </p>
+          </form>
+        )}
+
         {/* Register Form */}
-        {activeTab === 'register' && <form onSubmit={handleRegister} className="space-y-5">
+        {activeTab === "register" && (
+          <form
+            onSubmit={handleRegisterSubmit(onRegisterSubmit)}
+            className="space-y-5"
+          >
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Full Name
               </label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="John Doe" required disabled={loading} />
+              <input
+                type="text"
+                placeholder="John Doe"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isRegisterSubmitting}
+                {...registerRegister("name", {
+                  required: "Name is required",
+                })}
+              />
+              {registerErrors.name && (
+                <span className="text-red-500 text-sm mt-1">
+                  {registerErrors.name.message}
+                </span>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
               </label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="john@example.com" required disabled={loading} />
+              <input
+                type="email"
+                placeholder="john@example.com"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isRegisterSubmitting}
+                {...registerRegister("email", {
+                  required: "Email is required",
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Invalid email address",
+                  },
+                })}
+              />
+              {registerErrors.email && (
+                <span className="text-red-500 text-sm mt-1">
+                  {registerErrors.email.message}
+                </span>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required disabled={loading} minLength={6} />
+              <input
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isRegisterSubmitting}
+                {...registerRegister("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 6,
+                    message: "Password must be at least 6 characters",
+                  },
+                })}
+              />
+              {registerErrors.password && (
+                <span className="text-red-500 text-sm mt-1">
+                  {registerErrors.password.message}
+                </span>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Confirm Password
               </label>
-              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required disabled={loading} minLength={6} />
+              <input
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={isRegisterSubmitting}
+                {...registerRegister("confirmPassword", {
+                  required: "Please confirm your password",
+                  validate: (value) =>
+                    value === password || "Passwords do not match",
+                })}
+              />
+              {registerErrors.confirmPassword && (
+                <span className="text-red-500 text-sm mt-1">
+                  {registerErrors.confirmPassword.message}
+                </span>
+              )}
             </div>
-            <button type="submit" disabled={loading} className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors font-medium">
+
+            <button
+              type="submit"
+              disabled={isRegisterSubmitting}
+              className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors font-medium"
+            >
               <UserPlusIcon className="w-5 h-5 mr-2" />
-              {loading ? 'Creating account...' : 'Create Account'}
+              {isRegisterSubmitting ? "Creating account..." : "Create Account"}
             </button>
-          </form>}
+
+            <p className="text-sm text-gray-600 text-center">
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setActiveTab("login")}
+                className="text-blue-600 hover:underline font-medium"
+              >
+                Login here
+              </button>
+            </p>
+          </form>
+        )}
+
         <p className="text-sm text-gray-500 text-center mt-6">
-          Your information is stored locally on your device
+          Your information is securely stored with Supabase
         </p>
       </div>
-    </div>;
+    </div>
+  );
 }

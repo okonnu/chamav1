@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Group, User } from "../types";
 import {
   PlusIcon,
@@ -6,9 +6,8 @@ import {
   ChevronRightIcon,
   LogOutIcon,
   CrownIcon,
-  UserPlusIcon,
 } from "lucide-react";
-import { JoinRequestForm } from "./JoinRequestForm";
+import { GroupMarketplace } from "./GroupMarketplace";
 interface GroupListProps {
   user: User;
   groups: Group[];
@@ -26,7 +25,6 @@ export function GroupList({
   onRefresh,
 }: GroupListProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupDescription, setNewGroupDescription] = useState("");
   const handleCreateGroup = () => {
@@ -74,13 +72,6 @@ export function GroupList({
           </div>
           <div className="flex space-x-3">
             <button
-              onClick={() => setShowJoinModal(true)}
-              className="flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <UserPlusIcon className="w-5 h-5 mr-2" />
-              Join Group
-            </button>
-            <button
               onClick={() => setShowCreateModal(true)}
               className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
@@ -96,22 +87,15 @@ export function GroupList({
               No groups yet
             </h3>
             <p className="text-gray-600 mb-6">
-              Create your first investment group or join an existing one
+              Create your first investment group or explore available groups
+              below
             </p>
-            <div className="flex justify-center space-x-3">
-              <button
-                onClick={() => setShowJoinModal(true)}
-                className="px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Join a Group
-              </button>
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Create Your First Group
-              </button>
-            </div>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Create Your First Group
+            </button>
           </div>
         ) : (
           <div className="space-y-8">
@@ -199,6 +183,9 @@ export function GroupList({
             )}
           </div>
         )}
+
+        {/* Discover Groups Section */}
+        <GroupMarketplace user={user} onSuccess={onRefresh} />
       </main>
       {/* Create Group Modal */}
       {showCreateModal && (
@@ -250,14 +237,6 @@ export function GroupList({
             </div>
           </div>
         </div>
-      )}
-      {/* Join Request Modal */}
-      {showJoinModal && (
-        <JoinRequestForm
-          user={user}
-          onClose={() => setShowJoinModal(false)}
-          onSuccess={onRefresh}
-        />
       )}
     </div>
   );

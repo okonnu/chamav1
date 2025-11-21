@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 // Supabase configuration - Add your credentials here to enable Supabase
 // Leave empty to use LocalStorage instead
-const supabaseUrl = '';
-const supabaseAnonKey = '';
+const supabaseUrl = "https://zthoxpevzbsuymwrnngt.supabase.co"
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0aG94cGV2emJzdXltd3Jubmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4NTYxMzcsImV4cCI6MjA3ODQzMjEzN30.Wrbq1W3uswg-Wv5M4P7N7_th-1hPTykqyb-_DdW8bIw"
 // Create a mock client if credentials aren't provided
 export const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 // Helper to check if Supabase is configured
