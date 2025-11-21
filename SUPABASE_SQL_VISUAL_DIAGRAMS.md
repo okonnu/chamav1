@@ -212,7 +212,7 @@ Admin sets rotation recipients
 For each period, select member recipient
         ↓
 INSERT INTO periods (
-  group_id, number, recipient_id, 
+  group_id, number, recipient_id,
   start_date, end_date, status='upcoming'
 )
         ↓
@@ -298,7 +298,7 @@ CLIENT STATE:
 3. ADMINS can UPDATE group:
    WHERE id IN (
      SELECT group_id FROM group_memberships
-     WHERE user_id = auth.uid()::uuid 
+     WHERE user_id = auth.uid()::uuid
        AND role = 'admin'
    )
 
@@ -425,7 +425,7 @@ TOTAL DATABASE SIZE: 33 - 311 MB
 Supabase Free Tier:
   ├─ 500 MB storage
   ├─ Can handle: 1,500+ users ✓
-  
+
 Supabase Pro Tier:
   ├─ 8 GB storage
   ├─ Can handle: 20,000+ users ✓

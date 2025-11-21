@@ -12,7 +12,7 @@ This guide walks you through setting up your Supabase database tables using the 
 
 ✅ Supabase project created at https://app.supabase.com  
 ✅ Database connection available  
-✅ Project credentials noted (URL, API keys)  
+✅ Project credentials noted (URL, API keys)
 
 ## Step-by-Step Setup
 
@@ -54,6 +54,7 @@ This guide walks you through setting up your Supabase database tables using the 
 
 1. In Supabase, go to **Table Editor** (left sidebar)
 2. You should see these tables listed:
+
    - ✅ `users`
    - ✅ `groups`
    - ✅ `group_memberships`
@@ -81,6 +82,7 @@ This guide walks you through setting up your Supabase database tables using the 
 ### Tables Created
 
 #### 1. **users**
+
 Stores user accounts linked to Supabase Auth.
 
 ```
@@ -93,6 +95,7 @@ updated_at (TIMESTAMP) - Last update date
 
 **Purpose:** Central user registry  
 **Key Features:**
+
 - Linked to Supabase authentication via `id`
 - Unique email constraint
 - Indexed for fast email lookups
@@ -100,6 +103,7 @@ updated_at (TIMESTAMP) - Last update date
 ---
 
 #### 2. **groups**
+
 Stores investment group/club information.
 
 ```
@@ -118,6 +122,7 @@ start_date
 
 **Purpose:** Central group registry  
 **Key Features:**
+
 - Links to group creator via `created_by`
 - Includes all club configuration settings
 - Indexed on creator and date
@@ -125,6 +130,7 @@ start_date
 ---
 
 #### 3. **group_memberships**
+
 Tracks users in groups and their roles.
 
 ```
@@ -137,6 +143,7 @@ joined_date (TIMESTAMP) - When user joined
 
 **Purpose:** Junction table for many-to-many relationship  
 **Key Features:**
+
 - One membership per user per group (UNIQUE constraint)
 - Role-based access control
 - Tracks membership date
@@ -144,6 +151,7 @@ joined_date (TIMESTAMP) - When user joined
 ---
 
 #### 4. **members**
+
 Stores group member details (may differ from users).
 
 ```
@@ -160,6 +168,7 @@ scheduled_period (INTEGER) - Their scheduled period
 
 **Purpose:** Track member details per group  
 **Key Features:**
+
 - Separate from `users` table (member ≠ user account)
 - Tracks payment history and status
 - Period assignment tracking
@@ -167,6 +176,7 @@ scheduled_period (INTEGER) - Their scheduled period
 ---
 
 #### 5. **payments**
+
 Records payment transactions.
 
 ```
@@ -181,6 +191,7 @@ created_at (TIMESTAMP) - Record creation date
 
 **Purpose:** Payment transaction log  
 **Key Features:**
+
 - Links to member and group
 - Tracks period for each payment
 - Indexed by group, member, and period
@@ -188,6 +199,7 @@ created_at (TIMESTAMP) - Record creation date
 ---
 
 #### 6. **periods**
+
 Tracks payment periods and rotation recipients.
 
 ```
@@ -203,6 +215,7 @@ status (VARCHAR) - 'active', 'completed', or 'upcoming'
 
 **Purpose:** Track rotation schedule and payment periods  
 **Key Features:**
+
 - Unique period per group (cannot have two "Period 1"s)
 - Track period status
 - Links to member receiving payments
@@ -210,6 +223,7 @@ status (VARCHAR) - 'active', 'completed', or 'upcoming'
 ---
 
 #### 7. **join_requests**
+
 Tracks pending join requests.
 
 ```
@@ -226,6 +240,7 @@ updated_at (TIMESTAMP) - Last update date
 
 **Purpose:** Manage group membership requests  
 **Key Features:**
+
 - Prevents duplicate pending requests (UNIQUE constraint)
 - Tracks request status
 - Includes optional message from requester
@@ -283,27 +298,33 @@ RLS policies ensure users can only access data they're allowed to see.
 ### Key Policies
 
 **users table:**
+
 - Users can see only their own profile
 - Users can only update their own profile
 
 **groups table:**
+
 - Members of a group can read the group details
 - Creators can create new groups
 - Admins can update their group
 
 **members table:**
+
 - Group members can see all members in their groups
 - Admins can add/update members
 
 **payments table:**
+
 - Group members can see all payments in their groups
 - Admins can record new payments
 
 **periods table:**
+
 - Group members can see all periods
 - Admins can create/update periods
 
 **join_requests table:**
+
 - Users can see their own requests
 - Group admins can see requests for their groups
 - Users can create requests
@@ -314,22 +335,24 @@ RLS policies ensure users can only access data they're allowed to see.
 Two helpful views for common queries:
 
 ### 1. group_members_view
+
 Shows all members in each group with details.
 
 ```sql
-SELECT 
-  group_id, group_name, user_id, 
+SELECT
+  group_id, group_name, user_id,
   user_name, user_email, role, joined_date
 FROM group_members_view
 WHERE group_id = 'some-group-id'
 ```
 
 ### 2. group_statistics
+
 Shows group statistics (member count, payment totals).
 
 ```sql
-SELECT 
-  id, name, member_count, 
+SELECT
+  id, name, member_count,
   total_payments, total_amount_collected
 FROM group_statistics
 ```
@@ -340,8 +363,8 @@ FROM group_statistics
 
 ```sql
 -- In Supabase SQL Editor, run:
-SELECT table_name 
-FROM information_schema.tables 
+SELECT table_name
+FROM information_schema.tables
 WHERE table_schema = 'public';
 ```
 
@@ -351,8 +374,8 @@ Expected output: 7 tables listed
 
 ```sql
 -- View all policies:
-SELECT schemaname, tablename, policyname 
-FROM pg_policies 
+SELECT schemaname, tablename, policyname
+FROM pg_policies
 WHERE schemaname = 'public';
 ```
 
@@ -365,11 +388,11 @@ Expected: Multiple policies per table
 -- In Supabase Auth, create a test user first
 -- Then insert data for that user:
 
-INSERT INTO users (id, name, email) VALUES 
+INSERT INTO users (id, name, email) VALUES
   ('uuid-of-auth-user', 'Test User', 'test@example.com');
 
-INSERT INTO groups (name, created_by, club_name, contribution_amount, frequency, start_date) 
-VALUES 
+INSERT INTO groups (name, created_by, club_name, contribution_amount, frequency, start_date)
+VALUES
   ('Test Group', 'uuid-of-auth-user', 'Test Club', 500, 'monthly', CURRENT_TIMESTAMP);
 ```
 
@@ -382,18 +405,21 @@ VALUES
 ### Error: "Policies already exist"
 
 **Solution:** This means the script was run before. You can:
+
 - Drop and recreate: Run a DROP TABLE CASCADE script first
 - Or run the setup script again (it will skip existing items)
 
 ### Error: "User not authenticated"
 
-**Solution:** 
+**Solution:**
+
 - Ensure you're logged into Supabase
 - Authenticate through the app first before accessing data via RLS
 
 ### RLS Policies Not Working
 
 **Solution:**
+
 1. Verify policies are created (check Supabase Authentication → Policies)
 2. Test with authenticated user (not anonymous)
 3. Check `auth.uid()` returns correct user UUID
@@ -402,6 +428,7 @@ VALUES
 ### Query Returns No Results
 
 **Solution:**
+
 1. Check if RLS policy is blocking (run as admin first)
 2. Verify user has correct group membership
 3. Check `group_memberships` table for role assignment
@@ -412,15 +439,18 @@ VALUES
 After setup:
 
 1. **Create Auth Users**
+
    - Supabase Auth tab → Add test users
    - Use email: test@example.com, password: Test@123
 
 2. **Link Auth to Database**
+
    - Auth creates user with UUID
    - Insert matching row in `users` table
    - App does this automatically on signup
 
 3. **Test Policies**
+
    - Log in with test user
    - Try queries - should respect RLS policies
 
@@ -504,10 +534,10 @@ COPY users TO '/tmp/users.csv' WITH (FORMAT csv, HEADER);
 ### Check Table Sizes
 
 ```sql
-SELECT 
-  schemaname, tablename, 
+SELECT
+  schemaname, tablename,
   pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
-FROM pg_tables 
+FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 ```
@@ -515,6 +545,7 @@ ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 ### Find Slow Queries
 
 In Supabase Dashboard:
+
 1. Go to Database → Query Performance
 2. Review slow queries
 3. Add indexes if needed
@@ -523,7 +554,7 @@ In Supabase Dashboard:
 
 ```sql
 -- Archive payments older than 1 year
-DELETE FROM payments 
+DELETE FROM payments
 WHERE date < NOW() - INTERVAL '1 year'
   AND status = 'completed';
 ```

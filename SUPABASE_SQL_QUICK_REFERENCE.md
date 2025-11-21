@@ -11,11 +11,11 @@
 
 ## Files & Tables
 
-| File | Purpose |
-|------|---------|
-| `SUPABASE_SQL_SETUP.sql` | Complete SQL script (run this) |
-| `SUPABASE_DATABASE_SETUP_GUIDE.md` | Detailed setup instructions |
-| `SUPABASE_SQL_QUICK_REFERENCE.md` | This file |
+| File                               | Purpose                        |
+| ---------------------------------- | ------------------------------ |
+| `SUPABASE_SQL_SETUP.sql`           | Complete SQL script (run this) |
+| `SUPABASE_DATABASE_SETUP_GUIDE.md` | Detailed setup instructions    |
+| `SUPABASE_SQL_QUICK_REFERENCE.md`  | This file                      |
 
 ## 7 Tables Created
 
@@ -51,6 +51,7 @@ members
 ## Column Reference
 
 ### users
+
 ```
 id (UUID)           - Auto-generated
 name (VARCHAR)      - User full name
@@ -59,6 +60,7 @@ created_at          - Account creation timestamp
 ```
 
 ### groups
+
 ```
 id (UUID)                  - Auto-generated
 name, description          - Group details
@@ -74,6 +76,7 @@ start_date                 - Group start date
 ```
 
 ### group_memberships
+
 ```
 id (UUID)                  - Auto-generated
 group_id (UUID)            - FK to groups
@@ -83,6 +86,7 @@ joined_date                - When user joined
 ```
 
 ### members
+
 ```
 id (UUID)                  - Auto-generated
 group_id (UUID)            - FK to groups
@@ -94,6 +98,7 @@ scheduled_period (INT)     - Their rotation period
 ```
 
 ### payments
+
 ```
 id (UUID)                  - Auto-generated
 group_id (UUID)            - FK to groups
@@ -104,6 +109,7 @@ period (INT)               - Which period
 ```
 
 ### periods
+
 ```
 id (UUID)                  - Auto-generated
 group_id (UUID)            - FK to groups
@@ -115,6 +121,7 @@ status                     - active|completed|upcoming
 ```
 
 ### join_requests
+
 ```
 id (UUID)                  - Auto-generated
 group_id (UUID)            - FK to groups
@@ -127,19 +134,20 @@ created_at, updated_at     - Timestamps
 
 ## RLS Policies Enabled
 
-| Table | Who Can Read | Who Can Write |
-|-------|--------------|---------------|
-| users | Own profile only | Self only |
-| groups | Group members | Creator & admins |
-| memberships | Group members | Admins only |
-| members | Group members | Admins only |
-| payments | Group members | Admins only |
-| periods | Group members | Admins only |
-| join_requests | User & admins | Users & admins |
+| Table         | Who Can Read     | Who Can Write    |
+| ------------- | ---------------- | ---------------- |
+| users         | Own profile only | Self only        |
+| groups        | Group members    | Creator & admins |
+| memberships   | Group members    | Admins only      |
+| members       | Group members    | Admins only      |
+| payments      | Group members    | Admins only      |
+| periods       | Group members    | Admins only      |
+| join_requests | User & admins    | Users & admins   |
 
 ## Indexes Created
 
 Improves query performance:
+
 - `users(email)` - Fast email lookups
 - `groups(created_by)` - Find user's groups
 - `group_memberships(group_id, user_id)` - Member queries
@@ -153,16 +161,18 @@ Improves query performance:
 Pre-built queries:
 
 **group_members_view**
+
 ```sql
-SELECT group_id, group_name, user_id, user_name, 
+SELECT group_id, group_name, user_id, user_name,
        user_email, role, joined_date
 FROM group_members_view
 WHERE group_id = 'some-id'
 ```
 
 **group_statistics**
+
 ```sql
-SELECT id, name, member_count, 
+SELECT id, name, member_count,
        total_payments, total_amount_collected
 FROM group_statistics
 ```
@@ -175,9 +185,9 @@ The app's DAO already handles these tables:
 
 ```typescript
 // supabaseDAO.ts uses these tables automatically
-await dataAccess.getUserById(id)
-await dataAccess.getGroupsByUserId(id)
-await dataAccess.createPayment(groupId, payment)
+await dataAccess.getUserById(id);
+await dataAccess.getGroupsByUserId(id);
+await dataAccess.createPayment(groupId, payment);
 // etc...
 ```
 
@@ -191,7 +201,7 @@ SELECT * FROM users;
 SELECT * FROM groups WHERE created_by = 'user-uuid';
 
 -- Get members in a group
-SELECT u.name, gm.role 
+SELECT u.name, gm.role
 FROM group_memberships gm
 JOIN users u ON gm.user_id = u.id
 WHERE gm.group_id = 'group-uuid';
@@ -212,7 +222,7 @@ WHERE status = 'pending';
 
 ```sql
 SELECT COUNT(*) as table_count
-FROM information_schema.tables 
+FROM information_schema.tables
 WHERE table_schema = 'public';
 -- Should return: 7
 ```
@@ -236,30 +246,34 @@ WHERE schemaname = 'public';
 
 ## Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| "Table already exists" | Script uses IF NOT EXISTS (safe to rerun) |
-| "Extension not found" | Supabase has uuid-ossp pre-installed |
-| "RLS policy error" | Ensure user is authenticated |
-| "No rows returned" | Check RLS policy allows access |
-| "Foreign key violation" | Parent record must exist first |
+| Issue                   | Fix                                       |
+| ----------------------- | ----------------------------------------- |
+| "Table already exists"  | Script uses IF NOT EXISTS (safe to rerun) |
+| "Extension not found"   | Supabase has uuid-ossp pre-installed      |
+| "RLS policy error"      | Ensure user is authenticated              |
+| "No rows returned"      | Check RLS policy allows access            |
+| "Foreign key violation" | Parent record must exist first            |
 
 ## Execution Steps
 
 1. **Open Supabase Dashboard**
+
    - https://app.supabase.com
    - Select project: chamav1
 
 2. **Open SQL Editor**
+
    - Left sidebar → SQL Editor
    - Click + New Query
 
 3. **Copy SQL Script**
+
    - Open `SUPABASE_SQL_SETUP.sql`
    - Select all (Ctrl+A)
    - Copy (Ctrl+C)
 
 4. **Paste & Execute**
+
    - In SQL Editor, paste (Ctrl+V)
    - Click ▶ Run button
    - Wait for completion (~10-30 seconds)
@@ -278,7 +292,7 @@ WHERE schemaname = 'public';
 ✅ Check constraints (value validation)  
 ✅ 2 helpful views for common queries  
 ✅ Row-level security policies on all tables  
-✅ Automatic timestamps (created_at, updated_at)  
+✅ Automatic timestamps (created_at, updated_at)
 
 ## Security
 
@@ -287,7 +301,7 @@ WHERE schemaname = 'public';
 ✓ Group members can only see their group  
 ✓ Admins have elevated permissions  
 ✓ All queries validated by policies  
-✓ No anonymous access allowed  
+✓ No anonymous access allowed
 
 ## Performance
 
@@ -295,7 +309,7 @@ WHERE schemaname = 'public';
 ✓ Foreign keys indexed  
 ✓ Unique constraints efficient  
 ✓ Views pre-optimize queries  
-✓ Suitable for 1000+ users/group  
+✓ Suitable for 1000+ users/group
 
 ## Next Steps After Setup
 
