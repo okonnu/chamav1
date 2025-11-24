@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { User, Group, Member, Payment, Period } from '../../types';
 import { IDataAccess, JoinRequest } from './types';
+
 export class SupabaseDAO implements IDataAccess {
   async getUserById(userId: string): Promise<User | null> {
     const {
@@ -30,29 +31,39 @@ export class SupabaseDAO implements IDataAccess {
     return data;
   }
   async getGroupById(groupId: string): Promise<Group | null> {
-    const {
-      data: groupData,
-      error
-    } = await supabase.from('groups').select('*').eq('id', groupId).single();
-    if (error || !groupData) return null;
-    const [members, payments, periods, memberships] = await Promise.all([this.getMembersByGroupId(groupId), this.getPaymentsByGroupId(groupId), this.getPeriodsByGroupId(groupId), this.getMembershipsByGroupId(groupId)]);
+    const { data, error } = await supabase.rpc('get_group_by_id', {
+      gid: groupId,
+    });
+    if (error || !data) return null;
+
+    const groupData = data.group;
+    const members = data.members ? this.mapMembers(data.members) : [];
+    const payments = data.payments ? this.mapPayments(data.payments) : [];
+    const periods = data.periods ? this.mapPeriods(data.periods) : [];
+    const memberships = data.members ? data.members.map((m: any) => ({
+      userId: m.user_id,
+      role: m.role as 'admin' | 'member',
+      joinedDate: m.created_at,
+    })) : [];
+
     return this.mapToGroup(groupData, members, payments, periods, memberships);
   }
   async getGroupsByUserId(userId: string): Promise<Group[]> {
-    const {
-      data: memberships
-    } = await supabase.from('group_memberships').select('*').eq('user_id', userId);
-    if (!memberships) return [];
-    const groupIds = memberships.map(m => m.group_id);
-    const {
-      data: groupsData
-    } = await supabase.from('groups').select('*').in('id', groupIds);
-    if (!groupsData) return [];
-    const groups = await Promise.all(groupsData.map(async g => {
-      const [members, payments, periods, allMemberships] = await Promise.all([this.getMembersByGroupId(g.id), this.getPaymentsByGroupId(g.id), this.getPeriodsByGroupId(g.id), this.getMembershipsByGroupId(g.id)]);
-      return this.mapToGroup(g, members, payments, periods, allMemberships);
-    }));
-    return groups;
+    const { data, error } = await supabase.rpc('get_groups_by_user', {
+      uid: userId,
+    });
+    if (error || !data) return [];
+
+    return data.map((item: any) => {
+      const groupData = item.group;
+      return this.mapToGroup(
+        groupData,
+        [],
+        [],
+        [],
+        [{ userId, role: item.role, joinedDate: new Date() }]
+      );
+    });
   }
   async createGroup(group: Omit<Group, 'id' | 'createdDate' | 'members' | 'payments' | 'periods'>): Promise<Group> {
     const {
@@ -111,131 +122,94 @@ export class SupabaseDAO implements IDataAccess {
     if (error) throw error;
   }
   async getMembersByGroupId(groupId: string): Promise<Member[]> {
-    const {
-      data,
-      error
-    } = await supabase.from('members').select('*').eq('group_id', groupId);
+    const { data, error } = await supabase.rpc('get_members_by_group_detailed', {
+      gid: groupId,
+    });
     if (error || !data) return [];
-    return data.map(m => ({
-      id: m.id,
-      name: m.name,
-      email: m.email,
-      phone: m.phone || undefined,
-      joinedDate: m.joined_date,
-      hasReceived: m.has_received,
-      missedPayments: m.missed_payments,
-      scheduledPeriod: m.scheduled_period
+    return data.map((m: any) => ({
+      id: m.membership_id,
+      name: m.user_name,
+      email: m.user_email,
+      phone: m.user_phone || undefined,
+      joinedDate: m.membership_created_at,
+      hasReceived: false,
+      missedPayments: 0,
+      scheduledPeriod: undefined,
     }));
   }
   async createMember(groupId: string, member: Omit<Member, 'id' | 'joinedDate'>): Promise<Member> {
-    const {
-      data,
-      error
-    } = await supabase.from('members').insert({
-      group_id: groupId,
-      name: member.name,
-      email: member.email,
-      phone: member.phone || null,
-      has_received: member.hasReceived,
-      missed_payments: member.missedPayments,
-      scheduled_period: member.scheduledPeriod
-    }).select().single();
+    // First, check if user exists by email, otherwise create
+    let userId: string;
+    const existingUser = await this.getUserByEmail(member.email);
+
+    if (existingUser) {
+      userId = existingUser.id;
+    } else {
+      const newUser = await this.createUser({
+        name: member.name,
+        email: member.email,
+      });
+      userId = newUser.id;
+    }
+
+    // Create membership via direct table insert
+    const { data, error } = await supabase
+      .from('membership')
+      .insert({
+        user_id: userId,
+        group_id: groupId,
+        role: 'member',
+      })
+      .select()
+      .single();
+
     if (error) throw error;
+
     return {
       id: data.id,
-      name: data.name,
-      email: data.email,
-      phone: data.phone || undefined,
-      joinedDate: data.joined_date,
-      hasReceived: data.has_received,
-      missedPayments: data.missed_payments,
-      scheduledPeriod: data.scheduled_period
+      name: member.name,
+      email: member.email,
+      phone: member.phone || undefined,
+      joinedDate: data.created_at,
+      hasReceived: member.hasReceived,
+      missedPayments: member.missedPayments,
+      scheduledPeriod: member.scheduledPeriod,
     };
   }
   async updateMember(groupId: string, memberId: string, updates: Partial<Member>): Promise<void> {
     const updateData: any = {};
-    if (updates.name) updateData.name = updates.name;
-    if (updates.email) updateData.email = updates.email;
     if (updates.phone !== undefined) updateData.phone = updates.phone || null;
-    if (updates.hasReceived !== undefined) updateData.has_received = updates.hasReceived;
-    if (updates.missedPayments !== undefined) updateData.missed_payments = updates.missedPayments;
-    if (updates.scheduledPeriod !== undefined) updateData.scheduled_period = updates.scheduledPeriod;
-    const {
-      error
-    } = await supabase.from('members').update(updateData).eq('id', memberId).eq('group_id', groupId);
+
+    const { error } = await supabase
+      .from('membership')
+      .update(updateData)
+      .eq('id', memberId)
+      .eq('group_id', groupId);
+
     if (error) throw error;
   }
   async deleteMember(groupId: string, memberId: string): Promise<void> {
-    const {
-      error
-    } = await supabase.from('members').delete().eq('id', memberId).eq('group_id', groupId);
+    const { error } = await supabase
+      .from('membership')
+      .update({ has_exited: true })
+      .eq('id', memberId)
+      .eq('group_id', groupId);
+
     if (error) throw error;
   }
   async getPaymentsByGroupId(groupId: string): Promise<Payment[]> {
-    const {
-      data,
-      error
-    } = await supabase.from('payments').select('*').eq('group_id', groupId);
-    if (error || !data) return [];
-    return data.map(p => ({
-      memberId: p.member_id,
-      amount: p.amount,
-      date: p.date,
-      period: p.period
-    }));
-  }
-  async createPayment(groupId: string, payment: Payment): Promise<void> {
-    const {
-      error
-    } = await supabase.from('payments').insert({
-      group_id: groupId,
-      member_id: payment.memberId,
-      amount: payment.amount,
-      date: payment.date,
-      period: payment.period
+    const { data, error } = await supabase.rpc('get_payments_by_group', {
+      gid: groupId,
     });
-    if (error) throw error;
+    if (error || !data) return [];
+    return this.mapPayments(data);
   }
   async getPeriodsByGroupId(groupId: string): Promise<Period[]> {
-    const {
-      data,
-      error
-    } = await supabase.from('periods').select('*').eq('group_id', groupId);
-    if (error || !data) return [];
-    return data.map(p => ({
-      number: p.number,
-      recipientId: p.recipient_id,
-      startDate: p.start_date,
-      endDate: p.end_date,
-      totalCollected: p.total_collected,
-      status: p.status as 'active' | 'completed' | 'upcoming'
-    }));
-  }
-  async createPeriod(groupId: string, period: Period): Promise<void> {
-    const {
-      error
-    } = await supabase.from('periods').insert({
-      group_id: groupId,
-      number: period.number,
-      recipient_id: period.recipientId,
-      start_date: period.startDate,
-      end_date: period.endDate,
-      total_collected: period.totalCollected,
-      status: period.status
+    const { data, error } = await supabase.rpc('get_periods_by_group', {
+      gid: groupId,
     });
-    if (error) throw error;
-  }
-  async updatePeriod(groupId: string, periodNumber: number, updates: Partial<Period>): Promise<void> {
-    const updateData: any = {};
-    if (updates.recipientId) updateData.recipient_id = updates.recipientId;
-    if (updates.startDate) updateData.start_date = updates.startDate;
-    if (updates.endDate) updateData.end_date = updates.endDate;
-    if (updates.totalCollected !== undefined) updateData.total_collected = updates.totalCollected;
-    if (updates.status) updateData.status = updates.status;
-    const {
-      error
-    } = await supabase.from('periods').update(updateData).eq('group_id', groupId).eq('number', periodNumber);
-    if (error) throw error;
+    if (error || !data) return [];
+    return this.mapPeriods(data);
   }
   async createJoinRequest(request: Omit<JoinRequest, 'id' | 'created_at'>): Promise<JoinRequest> {
     const {
@@ -261,44 +235,66 @@ export class SupabaseDAO implements IDataAccess {
     return data;
   }
   async updateJoinRequestStatus(requestId: string, status: 'approved' | 'rejected'): Promise<void> {
-    const {
-      error
-    } = await supabase.from('join_requests').update({
-      status
-    }).eq('id', requestId);
+    const { error } = await supabase.rpc('update_join_request_status', {
+      request_id: requestId,
+      new_status: status,
+    });
     if (error) throw error;
   }
-  private async getMembershipsByGroupId(groupId: string) {
-    const {
-      data
-    } = await supabase.from('group_memberships').select('*').eq('group_id', groupId);
-    return (data || []).map(m => ({
-      userId: m.user_id,
-      role: m.role as 'admin' | 'member',
-      joinedDate: m.joined_date
+  private mapMembers(membersData: any[]): Member[] {
+    return membersData.map(m => ({
+      id: m.id,
+      name: m.user_name || 'Unknown',
+      email: m.user_email || '',
+      phone: m.user_phone || undefined,
+      joinedDate: m.membership_created_at,
+      hasReceived: false,
+      missedPayments: 0,
+      scheduledPeriod: undefined,
     }));
   }
+
+  private mapPayments(paymentsData: any[]): Payment[] {
+    return paymentsData.map(p => ({
+      memberId: p.membership_id,
+      amount: p.paid_amt,
+      date: p.updated_at,
+      period: p.period_id,
+    }));
+  }
+
+  private mapPeriods(periodsData: any[]): Period[] {
+    return periodsData.map(p => ({
+      number: 0,
+      recipientId: p.recipient_id,
+      startDate: p.start_date,
+      endDate: p.end_date,
+      totalCollected: p.collected_amt,
+      status: 'active' as const,
+    }));
+  }
+
   private mapToGroup(groupData: any, members: Member[], payments: Payment[], periods: Period[], memberships: any[]): Group {
     return {
       id: groupData.id,
-      name: groupData.name,
+      name: groupData.group_name,
       description: groupData.description || undefined,
       createdBy: groupData.created_by,
-      createdDate: groupData.created_date,
+      createdDate: groupData.created_at,
       memberships,
       club: {
-        name: groupData.club_name,
-        contributionAmount: groupData.contribution_amount,
+        name: groupData.group_name,
+        contributionAmount: groupData.contribution_amt,
         frequency: groupData.frequency as 'weekly' | 'monthly',
-        currentPeriod: groupData.current_period,
-        totalPeriods: groupData.total_periods,
-        numberOfCycles: groupData.number_of_cycles,
-        periodsPerCycle: groupData.periods_per_cycle,
-        startDate: groupData.start_date
+        currentPeriod: 0,
+        totalPeriods: groupData.cycles || 0,
+        numberOfCycles: groupData.cycles || 0,
+        periodsPerCycle: 1,
+        startDate: groupData.start_date,
       },
       members,
       payments,
-      periods
+      periods,
     };
   }
 }

@@ -38,7 +38,7 @@ export function App() {
     if (supabase) {
       const {
         data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
+      } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
           // Session exists and is valid
           const user: User = {
@@ -49,8 +49,24 @@ export function App() {
               "User",
             email: session.user.email || "",
           };
+
+          // Ensure user exists in database
+          try {
+            const existingUser = await dataAccess.getUserById(user.id);
+            if (!existingUser) {
+              // User authenticated but not in database, create them
+              await dataAccess.createUser({
+                name: user.name,
+                email: user.email,
+              });
+            }
+          } catch (error) {
+            console.error("Error ensuring user exists:", error);
+          }
+
           setCurrentUser(user);
           localStorage.setItem("currentUserId", user.id);
+          await loadGroups(user.id);
         } else {
           // Session expired or user logged out
           setCurrentUser(null);
