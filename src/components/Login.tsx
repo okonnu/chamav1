@@ -3,6 +3,7 @@ import { SubmitHandler, useForm } from "react-hook-form";
 import { User } from "../types";
 import { DollarSignIcon, LogInIcon, UserPlusIcon } from "lucide-react";
 import { supabase } from "../utils/supabase";
+import { dataAccess } from "../utils/dao";
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -49,27 +50,27 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
+      // Sign in with Supabase Auth
+      const { error: signInError, data: signInData } =
+        await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
 
       if (signInError) {
         setError(signInError.message);
         return;
       }
 
-      // Get user session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user) {
-        const user: User = {
-          id: session.user.id,
-          name:
-            session.user.user_metadata?.full_name || data.email.split("@")[0],
-          email: session.user.email || data.email,
-        };
+      if (signInData.user) {
+        // Create or get user in database
+        let user = await dataAccess.getUserByEmail(data.email);
+        if (!user) {
+          user = await dataAccess.createUser({
+            name: data.email.split("@")[0],
+            email: data.email,
+          });
+        }
         onLogin(user);
       }
     } catch (err) {
@@ -86,7 +87,14 @@ export function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      // Sign up with Supabase
+      // Check if user already exists in database
+      const existingUser = await dataAccess.getUserByEmail(data.email);
+      if (existingUser) {
+        setError("Email already registered");
+        return;
+      }
+
+      // Sign up with Supabase Auth
       const { error: signUpError, data: signUpData } =
         await supabase.auth.signUp({
           email: data.email,
@@ -104,12 +112,13 @@ export function Login({ onLogin }: LoginProps) {
       }
 
       if (signUpData.user) {
-        const user: User = {
-          id: signUpData.user.id,
+        // Create user in database
+        const newUser = await dataAccess.createUser({
           name: data.name,
           email: data.email,
-        };
-        onLogin(user);
+        });
+
+        onLogin(newUser);
       }
     } catch (err) {
       setError("An unexpected error occurred during registration");

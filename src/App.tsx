@@ -80,12 +80,17 @@ export function App() {
     }
   }, []);
   const loadUserData = async () => {
+    console.log("loading user data 1")
     try {
       // First, check if there's an existing Supabase session
+      console.log("loading user data 2");
       if (supabase) {
+        console.log("supabase client exists, checking session...");
         const {
           data: { session },
         } = await supabase.auth.getSession();
+
+        console.log("Session: " + session)
         if (session?.user) {
           const user: User = {
             id: session.user.id,
@@ -100,6 +105,8 @@ export function App() {
           await loadGroups(user.id);
           setLoading(false);
           return;
+        } else {
+          console.log("No active session found");
         }
       }
 

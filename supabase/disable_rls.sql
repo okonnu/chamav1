@@ -1,0 +1,11 @@
+-- Disable RLS policies for development
+-- Run this in Supabase SQL Editor
+
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE groups DISABLE ROW LEVEL SECURITY;
+ALTER TABLE group_memberships DISABLE ROW LEVEL SECURITY;
+ALTER TABLE periods DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE join_requests DISABLE ROW LEVEL SECURITY;
+
+SELECT 'RLS disabled on all tables' AS status;

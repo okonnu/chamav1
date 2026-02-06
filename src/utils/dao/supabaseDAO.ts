@@ -3,6 +3,54 @@ import { User, Group, Member, Payment, Period } from '../../types';
 import { IDataAccess, JoinRequest } from './types';
 
 export class SupabaseDAO implements IDataAccess {
+  /**
+   * Calculates computed Member fields that aren't stored in the database.
+   * These are derived from related data.
+   */
+  private async calculateMemberComputedFields(
+    groupId: string,
+    memberId: string,
+    userId: string
+  ): Promise<{ hasReceived: boolean; missedPayments: number; scheduledPeriod: number }> {
+    try {
+      // Check if user has received a payout (been a period recipient)
+      const { data: recipientData } = await supabase
+        .from('periods')
+        .select('id', { count: 'exact' })
+        .eq('group_id', groupId)
+        .eq('recipient_id', userId);
+
+      const hasReceived = (recipientData?.length ?? 0) > 0;
+
+      // Count missed payments
+      const { data: missedPaymentsData } = await supabase.rpc(
+        'count_missed_payments',
+        {
+          group_id: groupId,
+          membership_id: memberId,
+        }
+      );
+
+      const missedPayments = missedPaymentsData ?? 0;
+
+      // Get next scheduled period
+      const { data: nextPeriodData } = await supabase.rpc(
+        'get_next_scheduled_period',
+        { group_id: groupId }
+      );
+
+      const scheduledPeriod = nextPeriodData ?? 0;
+
+      return { hasReceived, missedPayments, scheduledPeriod };
+    } catch (error) {
+      console.warn('Error calculating computed fields:', error);
+      return {
+        hasReceived: false,
+        missedPayments: 0,
+        scheduledPeriod: 0,
+      };
+    }
+  }
   async getUserById(userId: string): Promise<User | null> {
     const {
       data,
@@ -126,16 +174,27 @@ export class SupabaseDAO implements IDataAccess {
       gid: groupId,
     });
     if (error || !data) return [];
-    return data.map((m: any) => ({
-      id: m.membership_id,
-      name: m.user_name,
-      email: m.user_email,
-      phone: m.user_phone || undefined,
-      joinedDate: m.membership_created_at,
-      hasReceived: false,
-      missedPayments: 0,
-      scheduledPeriod: undefined,
-    }));
+
+    // Add computed fields for each member
+    const members = await Promise.all(
+      data.map(async (m: any) => {
+        const computed = await this.calculateMemberComputedFields(
+          groupId,
+          m.membership_id,
+          m.user_id
+        );
+        return {
+          id: m.membership_id,
+          name: m.user_name,
+          email: m.user_email,
+          phone: m.user_phone || undefined,
+          joinedDate: m.membership_created_at,
+          ...computed,
+        };
+      })
+    );
+
+    return members;
   }
   async createMember(groupId: string, member: Omit<Member, 'id' | 'joinedDate'>): Promise<Member> {
     // First, check if user exists by email, otherwise create
@@ -152,9 +211,9 @@ export class SupabaseDAO implements IDataAccess {
       userId = newUser.id;
     }
 
-    // Create membership via direct table insert
+    // Create membership via group_memberships table
     const { data, error } = await supabase
-      .from('membership')
+      .from('group_memberships')
       .insert({
         user_id: userId,
         group_id: groupId,
@@ -165,15 +224,19 @@ export class SupabaseDAO implements IDataAccess {
 
     if (error) throw error;
 
+    const computed = await this.calculateMemberComputedFields(
+      groupId,
+      data.id,
+      userId
+    );
+
     return {
       id: data.id,
       name: member.name,
       email: member.email,
       phone: member.phone || undefined,
       joinedDate: data.created_at,
-      hasReceived: member.hasReceived,
-      missedPayments: member.missedPayments,
-      scheduledPeriod: member.scheduledPeriod,
+      ...computed,
     };
   }
   async updateMember(groupId: string, memberId: string, updates: Partial<Member>): Promise<void> {
@@ -181,7 +244,7 @@ export class SupabaseDAO implements IDataAccess {
     if (updates.phone !== undefined) updateData.phone = updates.phone || null;
 
     const { error } = await supabase
-      .from('membership')
+      .from('group_memberships')
       .update(updateData)
       .eq('id', memberId)
       .eq('group_id', groupId);
@@ -190,10 +253,52 @@ export class SupabaseDAO implements IDataAccess {
   }
   async deleteMember(groupId: string, memberId: string): Promise<void> {
     const { error } = await supabase
-      .from('membership')
+      .from('group_memberships')
       .update({ has_exited: true })
       .eq('id', memberId)
       .eq('group_id', groupId);
+
+    if (error) throw error;
+  }
+
+  async createPayment(groupId: string, payment: Payment): Promise<void> {
+    const { error } = await supabase.from('payments').insert({
+      membership_id: payment.memberId,
+      period_id: payment.period as any, // period field stores the period ID
+      paid_amt: payment.amount,
+    });
+
+    if (error) throw error;
+  }
+
+  async createPeriod(groupId: string, period: Period): Promise<void> {
+    const { error } = await supabase.from('periods').insert({
+      group_id: groupId,
+      number: period.number,
+      recipient_id: period.recipientId,
+      start_date: period.startDate,
+      end_date: period.endDate,
+      collected_amt: period.totalCollected,
+      status: period.status,
+    });
+
+    if (error) throw error;
+  }
+
+  async updatePeriod(groupId: string, periodNumber: number, updates: Partial<Period>): Promise<void> {
+    const updateData: any = {};
+
+    if (updates.recipientId !== undefined) updateData.recipient_id = updates.recipientId;
+    if (updates.startDate !== undefined) updateData.start_date = updates.startDate;
+    if (updates.endDate !== undefined) updateData.end_date = updates.endDate;
+    if (updates.totalCollected !== undefined) updateData.collected_amt = updates.totalCollected;
+    if (updates.status !== undefined) updateData.status = updates.status;
+
+    const { error } = await supabase
+      .from('periods')
+      .update(updateData)
+      .eq('group_id', groupId)
+      .eq('number', periodNumber);
 
     if (error) throw error;
   }
@@ -265,31 +370,31 @@ export class SupabaseDAO implements IDataAccess {
 
   private mapPeriods(periodsData: any[]): Period[] {
     return periodsData.map(p => ({
-      number: 0,
+      number: p.number,
       recipientId: p.recipient_id,
       startDate: p.start_date,
       endDate: p.end_date,
       totalCollected: p.collected_amt,
-      status: 'active' as const,
+      status: p.status as 'active' | 'completed' | 'upcoming',
     }));
   }
 
   private mapToGroup(groupData: any, members: Member[], payments: Payment[], periods: Period[], memberships: any[]): Group {
     return {
       id: groupData.id,
-      name: groupData.group_name,
+      name: groupData.name || groupData.group_name,
       description: groupData.description || undefined,
       createdBy: groupData.created_by,
-      createdDate: groupData.created_at,
+      createdDate: groupData.created_at || groupData.created_date,
       memberships,
       club: {
-        name: groupData.group_name,
-        contributionAmount: groupData.contribution_amt,
+        name: groupData.club_name || groupData.name || groupData.group_name,
+        contributionAmount: groupData.contribution_amt || groupData.contribution_amount,
         frequency: groupData.frequency as 'weekly' | 'monthly',
-        currentPeriod: 0,
-        totalPeriods: groupData.cycles || 0,
-        numberOfCycles: groupData.cycles || 0,
-        periodsPerCycle: 1,
+        currentPeriod: groupData.current_period || 0,
+        totalPeriods: groupData.total_periods || groupData.cycles || 0,
+        numberOfCycles: groupData.number_of_cycles || groupData.cycles || 0,
+        periodsPerCycle: groupData.periods_per_cycle || 1,
         startDate: groupData.start_date,
       },
       members,
